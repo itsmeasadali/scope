@@ -235,9 +235,9 @@ checks or approvals just to unblock a PR.
 Thank the contributor and link any follow-up work. The PR owner checks the post-merge result and
 coordinates a fix or revert if needed.
 
-If a contribution is not a fit, explain why and close it promptly. For inactive PRs, send a
-reminder after **two weeks** and close after **four weeks without a response**, making clear that
-the contributor can resume later.
+If a contribution is not a fit, explain why and close it promptly. When a PR is waiting on the contributor
+after a clear request for information or changes, send a reminder after **two weeks** and close after
+**four weeks without a response**, making clear that the contributor can resume later.
 
 ## Third-party notices
 
