@@ -193,7 +193,7 @@ features or architectural changes in an issue first.
 ### 2. Check readiness
 
 Before a detailed review, confirm that the PR explains what changed and why, satisfies the CLA
-requirement, and includes relevant tests and documentation. User-visible changes should include
+requirement, and includes relevant tests and documentation. Portal/CLI user-visible changes should include
 the demo requested by the PR template. If anything is missing, give the contributor a clear next
 step.
 
