@@ -52,7 +52,7 @@ layers.
 ### Non-goals
 
 - **Authorization policy details.** [auth-rbac.md](auth-rbac.md) defines platform and project
-  roles, the `project_memberships` collection, sharing links, permission resolution, and
+  roles, the `project_memberships` collection, explicit readonly shares, permission resolution, and
   enforcement. This document does not duplicate that policy.
 - **Cross-cutting tags/labels** — a companion organizing layer, specified in
   [data-tags.md](data-tags.md), not here. This doc covers only the project container.
@@ -97,7 +97,7 @@ documents do not carry `ownerId`, visibility, or generic sharing fields.
 | Layer | Responsibility | Integration |
 |-------|----------------|-------------|
 | **Organization** (this document) | `projects`, immutable `projectId`, explicit project selection, filing, filtering, and grouping | Supplies the target project for every project-scoped request. |
-| **Authorization** ([auth-rbac.md](auth-rbac.md)) | User identity, platform roles, project memberships, sharing links, and route guards | Confirms the caller's role for that exact `projectId` before data is read or changed. |
+| **Authorization** ([auth-rbac.md](auth-rbac.md)) | User identity, platform roles, project memberships, explicit readonly shares, and route guards | Confirms the caller's role for that exact `projectId` before data is read or changed. |
 
 The required `?projectId=` query parameter chooses a root resource's project; it never proves a
 right to use that project. API routes validate membership before applying the project filter or
@@ -294,26 +294,28 @@ membership before a caller can use the selected project.
   carries a `projectId` and filters accordingly.
 
 The platform administrator may list all project metadata and administer memberships, but cannot
-access a project's content without membership. Auth-rbac also defines the narrow authenticated
-sharing-link exception for an exact run or report.
+access a project's content without membership. Auth-rbac also defines the narrow explicit
+readonly-share exception for one run or report and one recipient bound by immutable IdP
+tenant/subject.
 
 ---
 
 ## Relationship to access control (auth-rbac)
 
 **This document defines no authorization policy.** [auth-rbac.md](auth-rbac.md) owns the
-platform-admin role, project `user`/`admin` roles, membership routes, sharing links, and route
+platform-admin role, project `user`/`admin` roles, membership routes, readonly shares, and route
 guards. The integration contract is:
 
 - Every project-scoped route resolves an immutable `projectId` from the selected project, route
   path, validated create body, or parent entity.
 - The guard loads the caller's `(projectId, userId)` membership before list/read/write/delete
-  access. A project user can manage the documented user resources; a project admin can manage all
-  project resources and project RBAC.
+  access. A project user can mutate user-editable resources and read the shared catalogs needed to
+  compose runs; a project admin can manage all project resources and project RBAC.
 - A platform admin may list all projects, delete any project, and manage RBAC on any project, but
   has no implicit project-content membership.
-- The only membership exception is an authenticated, read-only sharing link for one run or report.
-  The link does not permit project discovery, lists, writes, or any other resource.
+- The only membership exception is an explicit, read-only share of one run or report with one
+  immutable IdP subject. The share does not permit project discovery, lists, writes, or any other
+  resource, and neither a resource URL nor the current holder of an email/UPN alias gains access.
 
 `projectId` is therefore a required authorization input, but never an authorization grant by
 itself.
@@ -341,10 +343,10 @@ its fields.
   Default.
 - **Authorization rollout.** The project migration itself does not infer legacy access. Before
   project guards are enforced, a platform admin explicitly establishes Default-project
-  memberships. Once enforcement starts, only those memberships or a valid authenticated sharing
-  link expose legacy content.
-- **Going forward**, authenticated accounts create projects and become their project admin
-  atomically. New data lands only in an active project for which the caller has the required role.
+  memberships. Once enforcement starts, only those memberships or an explicit readonly share
+  resolved and persisted against the recipient's immutable IdP subject expose legacy content.
+- **Going forward**, platform admins create projects and become their project admin atomically.
+  New data lands only in an active project for which the caller has the required role.
 
 Migration mechanics (`mongo-migrate-ts`, CosmosDB-RU constraints — see
 [db-migrations.md](db-migrations.md)):
@@ -372,18 +374,20 @@ rule, every project capability in the Portal is also in the CLI.
 
 ### API
 
-- **Project operations:** any authenticated account may create a project; its creator becomes the
+- **Project operations:** only a platform admin may create a project; its creator becomes the
   project's admin. Members can list their projects; platform admins can list all project metadata.
   Project admins can update project metadata; only platform admins can soft-delete a project.
 - **Membership operations:** `GET /api/v1/projects/:projectId/members` and
-  `PUT`/`DELETE /api/v1/projects/:projectId/members/:userId` are authorized for a project admin
-  of that project or a platform admin. They are defined in [auth-rbac.md](auth-rbac.md).
+  the member-invitation plus `PUT`/`DELETE /api/v1/projects/:projectId/members/:userId` routes are
+  authorized for a project admin of that project or a platform admin. They are defined in
+  [auth-rbac.md](auth-rbac.md).
 - **How the project reaches the API — an explicit query parameter.** Root project-scoped
   operations carry `?projectId=<id>`. It makes the target visible in every request and follows the
   [by-id invariant](app-design.md#never-a-global-slug-only-action-on-a-project-scoped-entity-the-by-id-invariant).
-  Child resources derive their project from their parent. A run/report sharing link remains an
-  exact-resource, authenticated read-only capability defined in [auth-rbac.md](auth-rbac.md); it
-  is not a project-context override.
+  Child resources derive their project from their parent. A run/report readonly share remains an
+  exact-resource grant to one immutable IdP subject as defined in
+  [auth-rbac.md](auth-rbac.md); it is not a project-context override, and neither the resource URL
+  nor a mutable email/UPN alias is a capability.
 - **Not a URL path segment.** We deliberately do **not** nest routes under `/api/v1/projects/:id/…`.
   That would rewrite **every** existing route (a breaking change, contradicting the
   [non-breaking goal](#impact-on-existing-endpoints)) and conflate *context* with *identity* — an
@@ -412,7 +416,7 @@ belong to; an unchanged client cannot rely on falling back to the Default projec
 | **List** — `GET /api/v1/{requests, profiles, criteria, codebases, reports, insights, mcp-servers, skills, extensions, task-prompts, prompt-features, report-templates}` | AND-filter by `?projectId=` after membership is verified | The caller must select a project they may access; results never cross project boundaries. |
 | **Runs list** — `GET /api/v1/requests` | `projectId` added as a **filter + facet + `groupBy:"project"`** value in the existing filter/facet/group/cursor pipeline (#1138) — no new query engine | The selected project is mandatory after authorization is enabled. |
 | **Create** — `POST /api/v1/…` | Accepts a target `projectId` or uses the active project | The API validates the caller's required project role before creating the document. |
-| **Point read/update/delete** — `GET/PATCH/DELETE /api/v1/…/:id` | Routes remain stable; the API resolves the entity's project and checks membership before access. | `projectId` is immutable, so update/delete never re-file. An authenticated sharing link is the narrow read-only exception for a linked run or report. |
+| **Point read/update/delete** — `GET/PATCH/DELETE /api/v1/…/:id` | Routes remain stable; the API resolves the entity's project and checks membership before access. | `projectId` is immutable, so update/delete never re-file. A readonly share resolved to the recipient's immutable IdP subject is the narrow exception for one run or report. |
 | **Global catalog** — `GET /api/v1/agents`, `GET /api/v1/models` | **No change** — stay global platform infrastructure | Fully unaffected. |
 | **Infra / config** — `system`, `feature-flags`, `secrets` | **No change** — not user content, outside this layer | Fully unaffected. |
 
@@ -430,8 +434,8 @@ internal lookup by that content id becomes project-scoped — called out in that
   one is **always** selected ([never a cleared "All projects" state](#organization-semantics)). Runs
   and catalog lists scope to it, shown as a context indicator (not a removable filter chip); other
   filters remain removable.
-- Project management: every authenticated account can create; a project admin can rename,
-  describe, and manage members; a platform admin can list all projects and delete any project.
+- Project management: a platform admin can create, list, and delete projects; a project admin can
+  rename, describe, and manage members of their project.
 - Project shown on list rows and detail pages.
 
 ### CLI
@@ -465,8 +469,8 @@ flowchart LR
 - **P0 — Schema + Default + backfill.** Add `projectId`; create `projects`; create the Default
   project; backfill scoped documents. No access is inferred from old documents.
 - **P1 — Identity, memberships, and project APIs.** Add authenticated user records and
-  `project_memberships`; let every authenticated account create a project and atomically become its
-  project admin; add project membership management.
+  `project_memberships`; let platform admins create projects and atomically become their project
+  admin; add immutable-subject-bound project membership and pending-invitation management.
 - **P2 — Project guards + context.** Require membership before applying project filters or serving
   point reads; add active-project context, Runs `projectId` filter/facet/`groupBy:"project"`, Portal
   switcher, and CLI project commands. Project and platform role semantics come from auth-rbac.
@@ -528,7 +532,7 @@ The questions that belong to this organization layer are:
 - [data-tags.md](data-tags.md) — the **companion** cross-cutting **tags** layer that composes on
   top of the project filter (same organization, not access; ships additively after projects).
 - [auth-rbac.md](auth-rbac.md) — the access-control layer: platform administration, project
-  membership roles, authenticated run/report sharing links, and project-scoped route guards.
+  membership roles, immutable-subject-bound run/report shares, and project-scoped route guards.
 - [app-design.md](app-design.md) — Runs list query API (filters/facets/grouping/cursors) that
   the `projectId` dimension plugs into.
 - [codebases.md](codebases.md) — the first-class-entity pattern (fresh-UUID `_id`, soft-delete,
