@@ -205,7 +205,7 @@ check_or_install_base_tools() {
 
   if [[ ${#to_install[@]} -gt 0 ]]; then
     if confirm "Install missing base tools (${to_install[*]})?"; then
-      pkg_install "${to_install[@]}"
+      pkg_install "${to_install[@]}" || true
     fi
   fi
 }
@@ -219,13 +219,19 @@ check_or_install_build_deps() {
     mark_missing "shasum (or sha256sum)"
     case "$PKG_MANAGER" in
       apt)
-        confirm "Install libdigest-sha-perl (provides shasum)?" && pkg_install libdigest-sha-perl
+        if confirm "Install libdigest-sha-perl (provides shasum)?"; then
+          pkg_install libdigest-sha-perl || true
+        fi
         ;;
       dnf|zypper)
-        confirm "Install perl-Digest-SHA (provides shasum)?" && pkg_install perl-Digest-SHA
+        if confirm "Install perl-Digest-SHA (provides shasum)?"; then
+          pkg_install perl-Digest-SHA || true
+        fi
         ;;
       pacman)
-        confirm "Install perl-digest-sha (provides shasum)?" && pkg_install perl-digest-sha
+        if confirm "Install perl-digest-sha (provides shasum)?"; then
+          pkg_install perl-digest-sha || true
+        fi
         ;;
       *)
         warn "sha256sum is part of GNU coreutils and should already be present on most distros."
@@ -240,7 +246,9 @@ check_or_install_build_deps() {
         log "  ok: libnss3-tools (mkcert dependency)"
       else
         mark_missing "libnss3-tools"
-        confirm "Install libnss3-tools (mkcert dependency)?" && pkg_install libnss3-tools
+        if confirm "Install libnss3-tools (mkcert dependency)?"; then
+          pkg_install libnss3-tools || true
+        fi
       fi
       ;;
     dnf)
@@ -248,7 +256,9 @@ check_or_install_build_deps() {
         log "  ok: nss-tools (mkcert dependency)"
       else
         mark_missing "nss-tools"
-        confirm "Install nss-tools (mkcert dependency)?" && pkg_install nss-tools
+        if confirm "Install nss-tools (mkcert dependency)?"; then
+          pkg_install nss-tools || true
+        fi
       fi
       ;;
     zypper)
@@ -256,7 +266,9 @@ check_or_install_build_deps() {
         log "  ok: mozilla-nss-tools (mkcert dependency)"
       else
         mark_missing "mozilla-nss-tools"
-        confirm "Install mozilla-nss-tools (mkcert dependency)?" && pkg_install mozilla-nss-tools
+        if confirm "Install mozilla-nss-tools (mkcert dependency)?"; then
+          pkg_install mozilla-nss-tools || true
+        fi
       fi
       ;;
     pacman)
@@ -264,7 +276,9 @@ check_or_install_build_deps() {
         log "  ok: nss (mkcert dependency)"
       else
         mark_missing "nss"
-        confirm "Install nss (mkcert dependency)?" && pkg_install nss
+        if confirm "Install nss (mkcert dependency)?"; then
+          pkg_install nss || true
+        fi
       fi
       ;;
   esac
@@ -287,11 +301,11 @@ check_or_install_node() {
       case "$PKG_MANAGER" in
         apt)
           curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | sudo -E bash -
-          pkg_install nodejs
+          pkg_install nodejs || true
           ;;
         dnf)
           curl -fsSL "https://rpm.nodesource.com/setup_${NODE_MAJOR}.x" | sudo -E bash -
-          pkg_install nodejs
+          pkg_install nodejs || true
           ;;
         *)
           warn "No official Node.js repository configured for this distro."
@@ -434,18 +448,18 @@ check_or_install_gh() {
         curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
         sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-        pkg_install gh
+        pkg_install gh || true
         ;;
       dnf)
         sudo dnf install -y 'dnf-command(config-manager)'
         sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-        pkg_install gh
+        pkg_install gh || true
         ;;
       zypper)
-        pkg_install gh
+        pkg_install gh || true
         ;;
       pacman)
-        pkg_install github-cli
+        pkg_install github-cli || true
         ;;
       *)
         warn "Install gh manually: https://github.com/cli/cli#installation"
