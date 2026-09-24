@@ -122,9 +122,11 @@ function Install-WslAndDistribution {
 
     Write-Info "Updating the WSL2 kernel (wsl --update)..."
     try {
-        wsl --update | ForEach-Object { Write-Info $_ }
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "'wsl --update' exited with code $LASTEXITCODE."
+        $updateOutput = wsl --update
+        $updateExitCode = $LASTEXITCODE
+        $updateOutput | ForEach-Object { Write-Info $_ }
+        if ($updateExitCode -ne 0) {
+            Write-Warn "'wsl --update' exited with code $updateExitCode."
         }
     } catch {
         Write-Warn "'wsl --update' failed: $($_.Exception.Message)"
@@ -132,9 +134,11 @@ function Install-WslAndDistribution {
 
     Write-Info "Setting WSL default version to 2 (wsl --set-default-version 2)..."
     try {
-        wsl --set-default-version 2 | ForEach-Object { Write-Info $_ }
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "'wsl --set-default-version 2' exited with code $LASTEXITCODE."
+        $setVersionOutput = wsl --set-default-version 2
+        $setVersionExitCode = $LASTEXITCODE
+        $setVersionOutput | ForEach-Object { Write-Info $_ }
+        if ($setVersionExitCode -ne 0) {
+            Write-Warn "'wsl --set-default-version 2' exited with code $setVersionExitCode."
         }
     } catch {
         Write-Warn "'wsl --set-default-version 2' failed: $($_.Exception.Message)"
@@ -154,9 +158,11 @@ function Install-WslAndDistribution {
     } else {
         Write-Info "Installing '$DistroName' (wsl --install -d $DistroName)..."
         try {
-            wsl --install -d $DistroName | ForEach-Object { Write-Info $_ }
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warn "'wsl --install -d $DistroName' exited with code $LASTEXITCODE."
+            $installOutput = wsl --install -d $DistroName
+            $installExitCode = $LASTEXITCODE
+            $installOutput | ForEach-Object { Write-Info $_ }
+            if ($installExitCode -ne 0) {
+                Write-Warn "'wsl --install -d $DistroName' exited with code $installExitCode."
                 Write-Warn "You may need to reboot and re-run this script."
                 $script:RebootRequired = $true
             }

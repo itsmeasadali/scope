@@ -133,6 +133,9 @@ detect_package_manager() {
   fi
 }
 
+# Tracks whether `apt-get update` has already run in this invocation so that
+# repeated pkg_install calls (base tools, build deps, node, gh, ...) don't each
+# re-run it. Set to true the first time pkg_install refreshes the apt cache.
 APT_UPDATED=false
 
 pkg_install() {
@@ -305,7 +308,15 @@ check_or_install_node() {
     elif confirm "Activate pnpm ${PNPM_VERSION} via corepack (corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate)?"; then
       corepack enable >/dev/null 2>&1 || sudo corepack enable >/dev/null 2>&1 || true
       corepack prepare "pnpm@${PNPM_VERSION}" --activate
-      log "  ok: pnpm $(pnpm --version 2>/dev/null || echo "${PNPM_VERSION}") via corepack"
+      local activated_pnpm_version=""
+      if command_exists pnpm; then
+        activated_pnpm_version="$(pnpm --version 2>/dev/null || true)"
+      fi
+      if [[ "$activated_pnpm_version" == "$PNPM_VERSION" ]]; then
+        log "  ok: pnpm ${activated_pnpm_version} via corepack"
+      else
+        mark_missing "pnpm ${PNPM_VERSION} (activation reported version: ${activated_pnpm_version:-none})"
+      fi
     fi
   else
     mark_missing "corepack (bundled with Node.js ${NODE_MAJOR})"
