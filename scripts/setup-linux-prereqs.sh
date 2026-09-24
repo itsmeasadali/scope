@@ -221,8 +221,15 @@ check_or_install_build_deps() {
       apt)
         confirm "Install libdigest-sha-perl (provides shasum)?" && pkg_install libdigest-sha-perl
         ;;
-      *)
+      dnf|zypper)
         confirm "Install perl-Digest-SHA (provides shasum)?" && pkg_install perl-Digest-SHA
+        ;;
+      pacman)
+        confirm "Install perl-digest-sha (provides shasum)?" && pkg_install perl-digest-sha
+        ;;
+      *)
+        warn "sha256sum is part of GNU coreutils and should already be present on most distros."
+        warn "Install shasum manually (e.g. via your distro's Perl Digest::SHA package) if it is missing."
         ;;
     esac
   fi
@@ -317,6 +324,8 @@ check_or_install_node() {
       else
         mark_missing "pnpm ${PNPM_VERSION} (activation reported version: ${activated_pnpm_version:-none})"
       fi
+    else
+      mark_missing "pnpm ${PNPM_VERSION} (found: ${current_pnpm_version:-none}; declined to activate via corepack)"
     fi
   else
     mark_missing "corepack (bundled with Node.js ${NODE_MAJOR})"

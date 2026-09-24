@@ -108,6 +108,31 @@ function Test-VirtualizationEnabled {
     return $false
 }
 
+function Invoke-WslCommand {
+    <#
+        Runs `wsl.exe` with the given arguments, streams its output through
+        Write-Info, and returns the process exit code. Returns $null (and logs
+        a warning) if wsl.exe itself could not be invoked.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Description,
+        [Parameter(Mandatory)][string[]]$ArgumentList
+    )
+
+    try {
+        $output = & wsl.exe @ArgumentList
+        $exitCode = $LASTEXITCODE
+        $output | ForEach-Object { Write-Info $_ }
+        if ($exitCode -ne 0) {
+            Write-Warn "'$Description' exited with code $exitCode."
+        }
+        return $exitCode
+    } catch {
+        Write-Warn "'$Description' failed: $($_.Exception.Message)"
+        return $null
+    }
+}
+
 function Install-WslAndDistribution {
     param([string]$DistroName)
 
@@ -121,28 +146,10 @@ function Install-WslAndDistribution {
     }
 
     Write-Info "Updating the WSL2 kernel (wsl --update)..."
-    try {
-        $updateOutput = wsl --update
-        $updateExitCode = $LASTEXITCODE
-        $updateOutput | ForEach-Object { Write-Info $_ }
-        if ($updateExitCode -ne 0) {
-            Write-Warn "'wsl --update' exited with code $updateExitCode."
-        }
-    } catch {
-        Write-Warn "'wsl --update' failed: $($_.Exception.Message)"
-    }
+    Invoke-WslCommand -Description "wsl --update" -ArgumentList @("--update") | Out-Null
 
     Write-Info "Setting WSL default version to 2 (wsl --set-default-version 2)..."
-    try {
-        $setVersionOutput = wsl --set-default-version 2
-        $setVersionExitCode = $LASTEXITCODE
-        $setVersionOutput | ForEach-Object { Write-Info $_ }
-        if ($setVersionExitCode -ne 0) {
-            Write-Warn "'wsl --set-default-version 2' exited with code $setVersionExitCode."
-        }
-    } catch {
-        Write-Warn "'wsl --set-default-version 2' failed: $($_.Exception.Message)"
-    }
+    Invoke-WslCommand -Description "wsl --set-default-version 2" -ArgumentList @("--set-default-version", "2") | Out-Null
 
     $installedDistros = @()
     try {
@@ -157,17 +164,8 @@ function Install-WslAndDistribution {
         Write-Info "'$DistroName' is already installed."
     } else {
         Write-Info "Installing '$DistroName' (wsl --install -d $DistroName)..."
-        try {
-            $installOutput = wsl --install -d $DistroName
-            $installExitCode = $LASTEXITCODE
-            $installOutput | ForEach-Object { Write-Info $_ }
-            if ($installExitCode -ne 0) {
-                Write-Warn "'wsl --install -d $DistroName' exited with code $installExitCode."
-                Write-Warn "You may need to reboot and re-run this script."
-                $script:RebootRequired = $true
-            }
-        } catch {
-            Write-Warn "'wsl --install -d $DistroName' failed: $($_.Exception.Message)"
+        $installExitCode = Invoke-WslCommand -Description "wsl --install -d $DistroName" -ArgumentList @("--install", "-d", $DistroName)
+        if ($null -eq $installExitCode -or $installExitCode -ne 0) {
             Write-Warn "You may need to reboot and re-run this script."
             $script:RebootRequired = $true
         }
