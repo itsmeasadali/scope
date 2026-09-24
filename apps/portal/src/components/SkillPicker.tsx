@@ -85,6 +85,11 @@ interface SkillPickerProps {
   disabled?: boolean;
 }
 
+type DropdownLayout = {
+  side: "above" | "below";
+  maxHeight: number;
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -97,6 +102,10 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
   const [open, setOpen] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(0);
   const [manualOpen, setManualOpen] = useState(false);
+  const [dropdownLayout, setDropdownLayout] = useState<DropdownLayout>({
+    side: "below",
+    maxHeight: 256,
+  });
 
   const debouncedQuery = useDebounce(query, 300);
 
@@ -175,6 +184,38 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Keep the result list within the viewport. The picker often appears near
+  // the bottom of long profile forms, where a fixed downward dropdown would
+  // otherwise be clipped.
+  const updateDropdownLayout = useCallback(() => {
+    const rect = inputRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const viewportGap = 8;
+    const preferredHeight = 256;
+    const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportGap);
+    const spaceAbove = Math.max(0, rect.top - viewportGap);
+    const side = spaceBelow >= Math.min(preferredHeight, spaceAbove) ? "below" : "above";
+    const availableSpace = side === "below" ? spaceBelow : spaceAbove;
+
+    setDropdownLayout({
+      side,
+      maxHeight: Math.min(preferredHeight, availableSpace),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    updateDropdownLayout();
+    window.addEventListener("resize", updateDropdownLayout);
+    window.addEventListener("scroll", updateDropdownLayout, true);
+    return () => {
+      window.removeEventListener("resize", updateDropdownLayout);
+      window.removeEventListener("scroll", updateDropdownLayout, true);
+    };
+  }, [open, selected.length, updateDropdownLayout]);
+
   // ─── Import mutation (for external skills) ──────────────────────────
   const importMutation = useMutation({
     mutationFn: (result: SkillSearchResult) =>
@@ -215,7 +256,6 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
       } else {
         onChange([...selected, id]); // Add without hash (latest)
       }
-      setQuery("");
       inputRef.current?.focus();
     },
     [selected, selectedMap, onChange, importOnly],
@@ -322,123 +362,127 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
         {fetchingExternal && debouncedQuery.length >= 2 && (
           <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
         )}
-      </div>
-      )}
 
-      {/* Dropdown */}
-      {showDropdown && (
-        <div className="absolute z-50 top-full mt-1 w-full rounded-md border bg-popover shadow-md">
-          <div className="max-h-64 overflow-y-auto p-1">
-            {/* Internal results */}
-            {internalMatches.length > 0 && (
-              <>
-                {debouncedQuery.length >= 2 && filteredExternal.length > 0 && (
-                  <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Imported
-                  </div>
-                )}
-                {internalMatches.map((skill, idx) => {
-                  const isSelected = selectedMap.has(skill._id);
-                  return (
-                    <button
-                      key={skill._id}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => toggleItem(skill._id)}
-                      onMouseEnter={() => setHighlightIdx(idx)}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-left text-sm transition-colors ${
-                        idx === highlightIdx ? "bg-accent text-accent-foreground" : ""
-                      } ${importOnly ? "cursor-default" : "cursor-pointer"}`}
-                    >
-                      {!importOnly && (
-                        <span className={`flex items-center justify-center h-4 w-4 rounded border text-[10px] shrink-0 ${
-                          isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30"
-                        }`}>
-                          {isSelected && "✓"}
-                        </span>
-                      )}
-                      <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="font-mono font-medium shrink-0">{skill._id}</span>
-                      <span className="text-xs text-muted-foreground truncate">
-                        {skill.name}{skill.description ? ` — ${skill.description}` : ""}
-                      </span>
-                    </button>
-                  );
-                })}
-              </>
-            )}
-
-            {/* External results */}
-            {debouncedQuery.length >= 2 && filteredExternal.length > 0 && (
-              <>
-                <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground mt-1 border-t pt-2">
-                  <Globe className="inline h-3 w-3 mr-1" />
-                  External Registry
-                </div>
-                {filteredExternal.map((result, i) => {
-                  const globalIdx = internalMatches.length + i;
-                  return (
-                    <div
-                      key={result.id}
-                      onMouseEnter={() => setHighlightIdx(globalIdx)}
-                      className={`flex items-center gap-2 px-2 py-1.5 rounded-sm text-sm transition-colors ${
-                        globalIdx === highlightIdx ? "bg-accent text-accent-foreground" : ""
-                      }`}
-                    >
-                      <Globe className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-medium text-xs">{result.id}</span>
-                          {result.installs != null && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {result.installs.toLocaleString()} installs
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {result.name}{result.description ? ` — ${result.description}` : ""}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-xs gap-1 shrink-0"
-                        disabled={importMutation.isPending}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          importMutation.mutate(result);
-                        }}
-                      >
-                        {importMutation.isPending ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Download className="h-3 w-3" />
-                        )}
-                        Import
-                      </Button>
+        {/* Dropdown */}
+        {showDropdown && (
+          <div
+            className={`absolute z-50 w-full rounded-md border bg-popover shadow-md ${
+              dropdownLayout.side === "below" ? "top-full mt-1" : "bottom-full mb-1"
+            }`}
+          >
+            <div className="overflow-y-auto p-1" style={{ maxHeight: dropdownLayout.maxHeight }}>
+              {/* Internal results */}
+              {internalMatches.length > 0 && (
+                <>
+                  {debouncedQuery.length >= 2 && filteredExternal.length > 0 && (
+                    <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Imported
                     </div>
-                  );
-                })}
-              </>
-            )}
+                  )}
+                  {internalMatches.map((skill, idx) => {
+                    const isSelected = selectedMap.has(skill._id);
+                    return (
+                      <button
+                        key={skill._id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => toggleItem(skill._id)}
+                        onMouseEnter={() => setHighlightIdx(idx)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-left text-sm transition-colors ${
+                          idx === highlightIdx ? "bg-accent text-accent-foreground" : ""
+                        } ${importOnly ? "cursor-default" : "cursor-pointer"}`}
+                      >
+                        {!importOnly && (
+                          <span className={`flex items-center justify-center h-4 w-4 rounded border text-[10px] shrink-0 ${
+                            isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30"
+                          }`}>
+                            {isSelected && "✓"}
+                          </span>
+                        )}
+                        <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="font-mono font-medium shrink-0">{skill._id}</span>
+                        <span className="text-xs text-muted-foreground truncate">
+                          {skill.name}{skill.description ? ` — ${skill.description}` : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
 
-            {/* Loading indicator for external */}
-            {debouncedQuery.length >= 2 && fetchingExternal && filteredExternal.length === 0 && (
-              <div className="px-2 py-2 text-xs text-muted-foreground flex items-center gap-2">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Searching external registry…
-              </div>
-            )}
+              {/* External results */}
+              {debouncedQuery.length >= 2 && filteredExternal.length > 0 && (
+                <>
+                  <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground mt-1 border-t pt-2">
+                    <Globe className="inline h-3 w-3 mr-1" />
+                    External Registry
+                  </div>
+                  {filteredExternal.map((result, i) => {
+                    const globalIdx = internalMatches.length + i;
+                    return (
+                      <div
+                        key={result.id}
+                        onMouseEnter={() => setHighlightIdx(globalIdx)}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-sm text-sm transition-colors ${
+                          globalIdx === highlightIdx ? "bg-accent text-accent-foreground" : ""
+                        }`}
+                      >
+                        <Globe className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-medium text-xs">{result.id}</span>
+                            {result.installs != null && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {result.installs.toLocaleString()} installs
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {result.name}{result.description ? ` — ${result.description}` : ""}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-xs gap-1 shrink-0"
+                          disabled={importMutation.isPending}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            importMutation.mutate(result);
+                          }}
+                        >
+                          {importMutation.isPending ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Download className="h-3 w-3" />
+                          )}
+                          Import
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
 
-            {/* Empty state */}
-            {items.length === 0 && !fetchingExternal && query.trim() && (
-              <div className="p-3 text-sm text-muted-foreground text-center">
-                No matching skills found
-              </div>
-            )}
+              {/* Loading indicator for external */}
+              {debouncedQuery.length >= 2 && fetchingExternal && filteredExternal.length === 0 && (
+                <div className="px-2 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Searching external registry…
+                </div>
+              )}
+
+              {/* Empty state */}
+              {items.length === 0 && !fetchingExternal && query.trim() && (
+                <div className="p-3 text-sm text-muted-foreground text-center">
+                  No matching skills found
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+      </div>
       )}
 
       {/* Manual add section */}
