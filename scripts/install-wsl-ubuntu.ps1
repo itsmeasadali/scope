@@ -123,6 +123,9 @@ function Install-WslAndDistribution {
     Write-Info "Updating the WSL2 kernel (wsl --update)..."
     try {
         wsl --update | ForEach-Object { Write-Info $_ }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "'wsl --update' exited with code $LASTEXITCODE."
+        }
     } catch {
         Write-Warn "'wsl --update' failed: $($_.Exception.Message)"
     }
@@ -130,6 +133,9 @@ function Install-WslAndDistribution {
     Write-Info "Setting WSL default version to 2 (wsl --set-default-version 2)..."
     try {
         wsl --set-default-version 2 | ForEach-Object { Write-Info $_ }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "'wsl --set-default-version 2' exited with code $LASTEXITCODE."
+        }
     } catch {
         Write-Warn "'wsl --set-default-version 2' failed: $($_.Exception.Message)"
     }
@@ -147,6 +153,11 @@ function Install-WslAndDistribution {
         Write-Info "Installing '$DistroName' (wsl --install -d $DistroName)..."
         try {
             wsl --install -d $DistroName | ForEach-Object { Write-Info $_ }
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn "'wsl --install -d $DistroName' exited with code $LASTEXITCODE."
+                Write-Warn "You may need to reboot and re-run this script."
+                $script:RebootRequired = $true
+            }
         } catch {
             Write-Warn "'wsl --install -d $DistroName' failed: $($_.Exception.Message)"
             Write-Warn "You may need to reboot and re-run this script."
