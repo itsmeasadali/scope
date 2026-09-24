@@ -159,6 +159,9 @@ MongoDB is CosmosDB-compatible — avoid MongoDB features that CosmosDB's MongoD
 6. Open the PR and complete the CLA check if the bot asks you to. Address review feedback and keep the
    branch up to date with `main`.
 
+See [Reviewing and merging community contributions](#reviewing-and-merging-community-contributions)
+for what to expect, including our acknowledgement target and follow-up on PRs waiting for a response.
+
 ### Recording a demo
 
 For user-visible changes (Portal/CLI features or UX changes), attach a short recording in the PR's
@@ -190,18 +193,30 @@ coordinate the review and follow it through to merge or closure. Confirm that th
 Scope's direction before asking the contributor for substantial revisions. Discuss larger
 features or architectural changes in an issue first.
 
+Reviewer routing is the team's responsibility, not the contributor's. Until automated routing is
+configured, the team designates a triage maintainer to check incoming PRs each business day, assign
+a maintainer as the PR owner, and request reviewers familiar with the affected area.
+
+**Team follow-up:** add a `CODEOWNERS` file with a catch-all maintainers team and area owners for
+high-risk paths, including `.github/workflows/`, `packages/db-migrations/`, `packages/github-auth/`,
+`apps/token-manager/`, auth/RBAC and project-scoping code, and `packages/shared/`. Configure team
+review assignment to distribute requests, and branch protection to require code-owner review and
+dismiss stale approvals. These mechanisms are not configured by this policy change; until they
+are, the PR owner coordinates reviews and the merging maintainer checks the approval requirements.
+
 ### 2. Check readiness
 
 Before a detailed review, confirm that the PR explains what changed and why, satisfies the CLA
-requirement, and includes relevant tests and documentation. Portal/CLI user-visible changes should include
-the demo requested by the PR template. If anything is missing, give the contributor a clear next
-step.
+requirement, and includes relevant tests and documentation. Portal/CLI user-visible changes should
+include the demo requested by the PR template. If anything is missing, give the contributor a clear
+next step.
 
 ### 3. Review proportionately
 
 Require **one team maintainer's approval** for routine changes. Require **two team maintainers'
 approvals**, including someone familiar with the affected area, for changes involving
-authentication, permissions, data migrations, CI/deployment, or breaking APIs.
+authentication, permissions, project scoping or data isolation, data migrations, CI/deployment,
+new or upgraded dependencies, breaking APIs, or breaking changes to `packages/shared/`.
 
 Review correctness, maintainability, security, and compatibility. Apply Scope's existing
 requirements, including CLI/Portal parity, Storybook updates, and CosmosDB-compatible migrations
@@ -215,8 +230,11 @@ unrelated work. If reviewers disagree, the PR owner brings in the relevant maint
 it.
 
 Treat external code as untrusted when running it. Do not expose credentials, production data, or
-privileged runners to unreviewed code. Route vulnerability reports through
-[`SECURITY.md`](./SECURITY.md).
+privileged runners to unreviewed code. Before clicking **Approve and run workflows** for a fork
+PR, read the diff. Give extra scrutiny to `.github/workflows/`, including gh-aw `.md` and
+`.lock.yml` agentic workflows, and to `package.json` scripts and lifecycle hooks. Never add
+`pull_request_target` or secrets-bearing triggers to handle fork PRs. Route vulnerability reports
+through [`SECURITY.md`](./SECURITY.md).
 
 ### 5. Merge only when ready
 
@@ -227,17 +245,25 @@ A team maintainer merges once:
 - Relevant testing is complete. A check skipped on a fork is not evidence that it passed.
 - The CLA requirement is satisfied and any compatibility or rollout implications are documented.
 
-Use **squash merge** for a focused history and preserve contributor attribution. Do not bypass
-checks or approvals just to unblock a PR.
+Use **squash merge** for a focused history. Keep the contributor as the commit author and preserve
+`Co-authored-by:` trailers for other contributors who authored commits in the PR. Use a
+Conventional Commit title with the PR number, for example
+`docs: clarify contribution review policy (#1413)`. Do not bypass checks or approvals just to
+unblock a PR.
 
 ### 6. Close the loop
 
 Thank the contributor and link any follow-up work. The PR owner checks the post-merge result and
 coordinates a fix or revert if needed.
 
-If a contribution is not a fit, explain why and close it promptly. When a PR is waiting on the contributor
-after a clear request for information or changes, send a reminder after **two weeks** and close after
-**four weeks without a response**, making clear that the contributor can resume later.
+If a contribution is not a fit, explain why and close it promptly. When a PR is waiting on the
+contributor after a clear request for information or changes, send a reminder after **two weeks
+without a response**. Close it **two weeks after the reminder (four weeks total)** if there is
+still no response, making clear that the contributor can resume later. Do not close PRs under
+this rule when they are waiting on the team.
+
+As a team follow-up, create a `waiting-on-author` label to track these PRs. Once available, the PR
+owner applies it when requesting a response and removes it when the contributor responds.
 
 ## Third-party notices
 
