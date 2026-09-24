@@ -52,7 +52,7 @@ for arg in "$@"; do
       ASSUME_YES=true
       ;;
     -h|--help)
-      sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+      awk 'NR==1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
       exit 0
       ;;
     *)
@@ -293,8 +293,15 @@ check_or_install_node() {
 
   log "Checking corepack + pnpm ${PNPM_VERSION}..."
   if command_exists corepack; then
-    if $CHECK_ONLY; then
-      log "  ok: corepack present (pnpm ${PNPM_VERSION} will be prepared via corepack)"
+    local current_pnpm_version=""
+    if command_exists pnpm; then
+      current_pnpm_version="$(pnpm --version 2>/dev/null || true)"
+    fi
+
+    if [[ "$current_pnpm_version" == "$PNPM_VERSION" ]]; then
+      log "  ok: pnpm ${current_pnpm_version} already active via corepack"
+    elif $CHECK_ONLY; then
+      mark_missing "pnpm ${PNPM_VERSION} (found: ${current_pnpm_version:-none}; corepack can prepare it)"
     elif confirm "Activate pnpm ${PNPM_VERSION} via corepack (corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate)?"; then
       corepack enable >/dev/null 2>&1 || sudo corepack enable >/dev/null 2>&1 || true
       corepack prepare "pnpm@${PNPM_VERSION}" --activate

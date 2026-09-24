@@ -142,7 +142,9 @@ function Install-WslAndDistribution {
 
     $installedDistros = @()
     try {
-        $installedDistros = (wsl -l -q 2>$null) | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        $installedDistros = (wsl -l -q 2>$null) |
+            ForEach-Object { ($_ -replace '[^\x20-\x7E]', '').Trim() } |
+            Where-Object { $_ }
     } catch {
         $installedDistros = @()
     }
