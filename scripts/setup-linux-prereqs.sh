@@ -133,6 +133,8 @@ detect_package_manager() {
   fi
 }
 
+APT_UPDATED=false
+
 pkg_install() {
   # Installs one or more distro packages using the detected package manager.
   local pkgs=("$@")
@@ -141,7 +143,10 @@ pkg_install() {
   fi
   case "$PKG_MANAGER" in
     apt)
-      sudo apt-get update -y
+      if [[ "$APT_UPDATED" == false ]]; then
+        sudo apt-get update -y
+        APT_UPDATED=true
+      fi
       sudo apt-get install -y "${pkgs[@]}"
       ;;
     dnf)
@@ -288,12 +293,12 @@ check_or_install_node() {
 
   log "Checking corepack + pnpm ${PNPM_VERSION}..."
   if command_exists corepack; then
-    if [[ "$CHECK_ONLY" == false ]]; then
+    if $CHECK_ONLY; then
+      log "  ok: corepack present (pnpm ${PNPM_VERSION} will be prepared via corepack)"
+    elif confirm "Activate pnpm ${PNPM_VERSION} via corepack (corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate)?"; then
       corepack enable >/dev/null 2>&1 || sudo corepack enable >/dev/null 2>&1 || true
       corepack prepare "pnpm@${PNPM_VERSION}" --activate
       log "  ok: pnpm $(pnpm --version 2>/dev/null || echo "${PNPM_VERSION}") via corepack"
-    else
-      log "  ok: corepack present (pnpm ${PNPM_VERSION} will be prepared via corepack)"
     fi
   else
     mark_missing "corepack (bundled with Node.js ${NODE_MAJOR})"
