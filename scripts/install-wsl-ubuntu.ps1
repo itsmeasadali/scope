@@ -175,7 +175,10 @@ function Show-NextSteps {
 # Main
 # ---------------------------------------------------------------------------
 
-if ($env:OS -notlike "Windows*" -and -not $IsWindows) {
+# $IsWindows only exists on PowerShell 6+ (Core); Windows PowerShell 5.1 always
+# runs on Windows and does not define it, so guard the lookup under StrictMode.
+$onWindowsCore = (Get-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $IsWindows
+if ($env:OS -notlike "Windows*" -and -not $onWindowsCore) {
     Write-Error "install-wsl-ubuntu.ps1 must be run on Windows."
     exit 1
 }

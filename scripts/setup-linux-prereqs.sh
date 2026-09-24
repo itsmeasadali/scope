@@ -80,6 +80,10 @@ is_wsl() {
 
 confirm() {
   local prompt="$1"
+  if $CHECK_ONLY; then
+    # --check is a dry run: never prompt, never install.
+    return 1
+  fi
   if $ASSUME_YES || is_ci; then
     return 0
   fi
@@ -174,15 +178,24 @@ check_or_install_base_tools() {
     fi
   done
 
-  # ca-certificates has no CLI to probe for; install/verify via package manager.
+  # ca-certificates has no CLI to probe for; check its installed state via the
+  # package manager before deciding whether it needs to be (re)installed.
+  local ca_certs_present=false
   case "$PKG_MANAGER" in
-    apt) to_install+=(ca-certificates) ;;
-    dnf) to_install+=(ca-certificates) ;;
-    zypper) to_install+=(ca-certificates) ;;
-    pacman) to_install+=(ca-certificates) ;;
+    apt) dpkg -s ca-certificates >/dev/null 2>&1 && ca_certs_present=true ;;
+    dnf) rpm -q ca-certificates >/dev/null 2>&1 && ca_certs_present=true ;;
+    zypper) rpm -q ca-certificates >/dev/null 2>&1 && ca_certs_present=true ;;
+    pacman) pacman -Qi ca-certificates >/dev/null 2>&1 && ca_certs_present=true ;;
   esac
 
-  if [[ ${#to_install[@]} -gt 0 && "$CHECK_ONLY" == false ]]; then
+  if [[ "$ca_certs_present" == true ]]; then
+    log "  ok: ca-certificates"
+  else
+    mark_missing "ca-certificates"
+    to_install+=(ca-certificates)
+  fi
+
+  if [[ ${#to_install[@]} -gt 0 ]]; then
     if confirm "Install missing base tools (${to_install[*]})?"; then
       pkg_install "${to_install[@]}"
     fi
@@ -198,10 +211,10 @@ check_or_install_build_deps() {
     mark_missing "shasum (or sha256sum)"
     case "$PKG_MANAGER" in
       apt)
-        [[ "$CHECK_ONLY" == false ]] && confirm "Install libdigest-sha-perl (provides shasum)?" && pkg_install libdigest-sha-perl
+        confirm "Install libdigest-sha-perl (provides shasum)?" && pkg_install libdigest-sha-perl
         ;;
       *)
-        [[ "$CHECK_ONLY" == false ]] && confirm "Install perl-Digest-SHA (provides shasum)?" && pkg_install perl-Digest-SHA
+        confirm "Install perl-Digest-SHA (provides shasum)?" && pkg_install perl-Digest-SHA
         ;;
     esac
   fi
@@ -212,7 +225,7 @@ check_or_install_build_deps() {
         log "  ok: libnss3-tools (mkcert dependency)"
       else
         mark_missing "libnss3-tools"
-        [[ "$CHECK_ONLY" == false ]] && confirm "Install libnss3-tools (mkcert dependency)?" && pkg_install libnss3-tools
+        confirm "Install libnss3-tools (mkcert dependency)?" && pkg_install libnss3-tools
       fi
       ;;
     dnf)
@@ -220,7 +233,7 @@ check_or_install_build_deps() {
         log "  ok: nss-tools (mkcert dependency)"
       else
         mark_missing "nss-tools"
-        [[ "$CHECK_ONLY" == false ]] && confirm "Install nss-tools (mkcert dependency)?" && pkg_install nss-tools
+        confirm "Install nss-tools (mkcert dependency)?" && pkg_install nss-tools
       fi
       ;;
     zypper)
@@ -228,7 +241,7 @@ check_or_install_build_deps() {
         log "  ok: mozilla-nss-tools (mkcert dependency)"
       else
         mark_missing "mozilla-nss-tools"
-        [[ "$CHECK_ONLY" == false ]] && confirm "Install mozilla-nss-tools (mkcert dependency)?" && pkg_install mozilla-nss-tools
+        confirm "Install mozilla-nss-tools (mkcert dependency)?" && pkg_install mozilla-nss-tools
       fi
       ;;
     pacman)
@@ -236,7 +249,7 @@ check_or_install_build_deps() {
         log "  ok: nss (mkcert dependency)"
       else
         mark_missing "nss"
-        [[ "$CHECK_ONLY" == false ]] && confirm "Install nss (mkcert dependency)?" && pkg_install nss
+        confirm "Install nss (mkcert dependency)?" && pkg_install nss
       fi
       ;;
   esac
@@ -248,11 +261,14 @@ check_or_install_build_deps() {
 check_or_install_node() {
   log "Checking Node.js ${NODE_MAJOR}..."
 
+  # Scope pins CI and the `packageManager` field to Node 22.x specifically (see
+  # CONTRIBUTING.md); a newer major version is intentionally still reported as
+  # missing here so contributors match CI rather than an untested runtime.
   if command_exists node && [[ "$(node -v | sed 's/^v//' | cut -d. -f1)" == "$NODE_MAJOR" ]]; then
     log "  ok: node $(node -v)"
   else
     mark_missing "node.js ${NODE_MAJOR}.x"
-    if [[ "$CHECK_ONLY" == false ]] && confirm "Install Node.js ${NODE_MAJOR} from the official repository?"; then
+    if confirm "Install Node.js ${NODE_MAJOR} from the official repository?"; then
       case "$PKG_MANAGER" in
         apt)
           curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | sudo -E bash -
@@ -299,7 +315,7 @@ check_or_install_docker() {
     log "  ok: docker $(docker --version 2>/dev/null || true)"
   else
     mark_missing "Docker Engine"
-    if [[ "$CHECK_ONLY" == false ]] && confirm "Install Docker Engine via get.docker.com convenience script?"; then
+    if confirm "Install Docker Engine via get.docker.com convenience script?"; then
       curl -fsSL https://get.docker.com | sudo sh
       if command_exists usermod; then
         sudo usermod -aG docker "$USER"
@@ -345,7 +361,7 @@ check_or_install_mkcert() {
   fi
 
   mark_missing "mkcert"
-  if [[ "$CHECK_ONLY" == false ]] && confirm "Install mkcert ${MKCERT_VERSION} from GitHub releases?"; then
+  if confirm "Install mkcert ${MKCERT_VERSION} from GitHub releases?"; then
     local url="https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-${ARCH}"
     local tmp
     tmp="$(mktemp)"
@@ -379,7 +395,7 @@ check_or_install_gh() {
   fi
 
   mark_missing "GitHub CLI (gh)"
-  if [[ "$CHECK_ONLY" == false ]] && confirm "Install GitHub CLI (gh)?"; then
+  if confirm "Install GitHub CLI (gh)?"; then
     case "$PKG_MANAGER" in
       apt)
         sudo mkdir -p -m 755 /etc/apt/keyrings
