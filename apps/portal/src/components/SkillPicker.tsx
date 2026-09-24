@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +88,10 @@ interface SkillPickerProps {
 
 type DropdownLayout = {
   side: "above" | "below";
+  left: number;
+  width: number;
+  top?: number;
+  bottom?: number;
   maxHeight: number;
 };
 
@@ -96,6 +101,7 @@ type DropdownLayout = {
 export function SkillPicker({ selected, onChange, importOnly = false, disabled = false }: SkillPickerProps) {
   const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [query, setQuery] = useState("");
@@ -104,6 +110,9 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
   const [manualOpen, setManualOpen] = useState(false);
   const [dropdownLayout, setDropdownLayout] = useState<DropdownLayout>({
     side: "below",
+    left: 0,
+    width: 0,
+    top: 0,
     maxHeight: 256,
   });
 
@@ -176,7 +185,12 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
   // ─── Outside click ──────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        !dropdownRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -184,9 +198,8 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Keep the result list within the viewport. The picker often appears near
-  // the bottom of long profile forms, where a fixed downward dropdown would
-  // otherwise be clipped.
+  // Keep the result list within the viewport. The fixed, portaled layer avoids
+  // clipping by scrollable profile forms and dialogs.
   const updateDropdownLayout = useCallback(() => {
     const rect = inputRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -198,21 +211,47 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
     const side = spaceBelow >= Math.min(preferredHeight, spaceAbove) ? "below" : "above";
     const availableSpace = side === "below" ? spaceBelow : spaceAbove;
 
-    setDropdownLayout({
+    const nextLayout: DropdownLayout = {
       side,
+      left: rect.left,
+      width: rect.width,
+      ...(side === "below"
+        ? { top: rect.bottom + 4 }
+        : { bottom: window.innerHeight - rect.top + 4 }),
       maxHeight: Math.min(preferredHeight, availableSpace),
-    });
+    };
+
+    setDropdownLayout((current) =>
+      current.side === nextLayout.side &&
+      current.left === nextLayout.left &&
+      current.width === nextLayout.width &&
+      current.top === nextLayout.top &&
+      current.bottom === nextLayout.bottom &&
+      current.maxHeight === nextLayout.maxHeight
+        ? current
+        : nextLayout,
+    );
   }, []);
 
   useEffect(() => {
     if (!open) return;
+    let rafId: number | undefined;
+
+    const scheduleDropdownLayout = () => {
+      if (rafId !== undefined) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = undefined;
+        updateDropdownLayout();
+      });
+    };
 
     updateDropdownLayout();
-    window.addEventListener("resize", updateDropdownLayout);
-    window.addEventListener("scroll", updateDropdownLayout, true);
+    window.addEventListener("resize", scheduleDropdownLayout);
+    window.addEventListener("scroll", scheduleDropdownLayout, true);
     return () => {
-      window.removeEventListener("resize", updateDropdownLayout);
-      window.removeEventListener("scroll", updateDropdownLayout, true);
+      if (rafId !== undefined) window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", scheduleDropdownLayout);
+      window.removeEventListener("scroll", scheduleDropdownLayout, true);
     };
   }, [open, selected.length, updateDropdownLayout]);
 
@@ -363,12 +402,21 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
           <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
         )}
 
-        {/* Dropdown */}
-        {showDropdown && (
+        {/* Dropdown: portaled to avoid clipping by scrollable ancestors. */}
+        {showDropdown && createPortal(
           <div
-            className={`absolute z-50 w-full rounded-md border bg-popover shadow-md ${
-              dropdownLayout.side === "below" ? "top-full mt-1" : "bottom-full mb-1"
-            }`}
+            ref={dropdownRef}
+            data-skill-picker-portal
+            className="rounded-md border bg-popover shadow-md"
+            style={{
+              position: "fixed",
+              left: dropdownLayout.left,
+              width: dropdownLayout.width,
+              top: dropdownLayout.top,
+              bottom: dropdownLayout.bottom,
+              zIndex: 100,
+              pointerEvents: "auto",
+            }}
           >
             <div className="overflow-y-auto p-1" style={{ maxHeight: dropdownLayout.maxHeight }}>
               {/* Internal results */}
@@ -480,7 +528,8 @@ export function SkillPicker({ selected, onChange, importOnly = false, disabled =
                 </div>
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
       )}
