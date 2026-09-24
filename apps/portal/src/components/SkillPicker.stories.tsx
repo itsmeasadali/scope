@@ -6,6 +6,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { http, HttpResponse } from "msw";
 import type { SkillDocument } from "@/types";
+import { setSelectedProjectIdHolder } from "@/lib/project-scope";
 import { SkillPicker } from "./SkillPicker";
 
 const skills = Array.from({ length: 13 }, (_, index) => ({
@@ -15,6 +16,7 @@ const skills = Array.from({ length: 13 }, (_, index) => ({
 })) as SkillDocument[];
 
 function SkillPickerHarness() {
+  setSelectedProjectIdHolder("demo-project");
   const [selected, setSelected] = useState<string[]>([]);
   return (
     <div className="w-[44rem] max-w-full p-6">
